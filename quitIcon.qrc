@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/img">
+        <file>remove.png</file>
+        <file>play.png</file>
+        <file>settings.png</file>
+        <file>diskette.png</file>
+        <file>reset.png</file>
+        <file>share.png</file>
+        <file>magic-wand.png</file>
+        <file>restart.png</file>
+        <file>stop.png</file>
+        <file>plane.png</file>
+    </qresource>
+</RCC>

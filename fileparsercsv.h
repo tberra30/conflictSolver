@@ -1,0 +1,32 @@
+#ifndef FILEPARSERCSV_H
+#define FILEPARSERCSV_H
+
+#include "flight.h"
+#include <QString>
+#include <QList>
+
+/*
+    Parse a given file
+    Check if the file match attemps
+    Data owner & manager
+*/
+class FileParserCsv {
+public:
+    FileParserCsv();
+    bool load(QString);
+    void setProperies(QList<QString>);
+    void setFlightList(QList<Flight>);
+
+    int getTotalMinutes() const;
+    int getWidth() const;
+    int getHeight() const;
+    const QList<Flight> &getFlightList() const;
+
+private:
+    QList<QList<QString>> flightListTemp;
+    QList<Flight> flightList;
+    bool isApproved();
+    int width, height;
+};
+
+#endif // FILEPARSERCSV_H
