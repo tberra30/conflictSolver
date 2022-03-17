@@ -13,11 +13,13 @@ SOURCES += \
     flight.cpp \
     geneticalgorithm.cpp \
     graphicpainter.cpp \
+    individual.cpp \
     main.cpp \
     mainwindow.cpp \
     point.cpp \
-    randomflights.cpp \
-    scenariodialog.cpp \
+    quadraticequationsolver.cpp \
+    scenarioconfigurator.cpp \
+    scenariogenerator.cpp \
     simpleflight.cpp
 
 HEADERS += \
@@ -26,15 +28,17 @@ HEADERS += \
     flight.h \
     geneticalgorithm.h \
     graphicpainter.h \
+    individual.h \
     mainwindow.h \
     point.h \
-    randomflights.h \
-    scenariodialog.h \
+    quadraticequationsolver.h \
+    scenarioconfigurator.h \
+    scenariogenerator.h \
     simpleflight.h
 
 FORMS += \
     mainwindow.ui \
-    scenario.ui
+    scenarioconfigurator.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

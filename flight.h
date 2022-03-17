@@ -6,11 +6,14 @@
 
 #include "point.h"
 
+/*
+ * Flight object builder, with all required or util informations
+*/
 class Flight
 {
 public:
-    Flight(const Flight&);
-    Flight(int, int, int, int, int, int, int);
+    Flight(const Flight& flight);
+    Flight(int x0, int y0, int x1, int y1, int startTime, int speed, int flightNumber);
     friend ostream& operator<<(ostream&, const Flight&);
     friend bool operator==(const Flight&, const Flight&);
     friend bool operator!=(const Flight&, const Flight&);
@@ -22,33 +25,38 @@ public:
     double getHdg (int);
     int getStartTime() const;
     int getSpeed() const;
-    double getArvTime() const;
+    int getArvTime() const;
     double getRange() const;
     double getHeading() const;
     QString &getFlightNumberStr();
     QList<Point> &getPreviousPositions();
+    int getLeg(int time);
 
     // Setters
-    void updatePreviousPositions(Point newPoint);
+    void updatePreviousPositions(int time);
     void setTurn(const QList<int> &newTurn);
 
     // Methods
     bool isInConflict(QList<Flight> ,int);
-    bool isDefault();
+    bool hasTurned();
     double distance(Flight, int); // Compute distance between 2 airplanes for a given time
+    int computeDelay();
 
     const QList<Point> &getRoute() const;
+
+    const QList<int> &getLegTimes() const;
 
 private:
     // Native attributes
     Point X0;
     Point X1;
     QList<Point> route;
+    QList<int> legTimes;
     int startTime;
     int speed;
 
     // Computed attributes
-    double arvTime;
+    int arvTime;
     double range;
     double heading;
     QString flightNumberStr;
@@ -56,10 +64,10 @@ private:
     QList<int> turn;
 
     // private methods
-    bool isDetourned();
     void setRoute();
     void setRange();
     void setArvTime();
+    void setTimes();
 
 };
 

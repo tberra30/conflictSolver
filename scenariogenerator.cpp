@@ -1,8 +1,9 @@
-#include "randomflights.h"
-
+#include "scenariogenerator.h"
+#include "Constants.h"
 #include <fstream>
 #include <map>
 #include <ctime>
+#include <iostream>
 
 using namespace std;
 
@@ -30,9 +31,16 @@ static map<int, int> yMap = {
 /*
     This function returns an int in [min, max]
 */
-int randomNumber(int min, int max)
+int ScenarioGenerator::randomNumber(int min, int max)
 {
     return (rand() % (max - min + 1)) + min;
+}
+
+/*
+    This function returns a double in [0, 1]
+*/
+double ScenarioGenerator::random() {
+    return ((double) rand() / (RAND_MAX));
 }
 
 /*
@@ -73,7 +81,7 @@ static QString getTime()
             face : int in {0, 1, 2, 3}
             mapType : char 'x' or 'y'
 */
-int RandomFlights::computeCoordinate(int face, char mapType)
+int ScenarioGenerator::computeCoordinate(int face, char mapType)
 {
     map<int, int> map = (mapType == 'x') ? xMap : yMap;
     int maxNumber = (mapType == 'x') ? width : height;
@@ -92,31 +100,53 @@ int RandomFlights::computeCoordinate(int face, char mapType)
     }
 }
 
+ScenarioGenerator::ScenarioGenerator() {
+    this->height = WINDOW_HEIGHT;
+    this->width = WINDOW_WIDTH;
+    this->duration = TOTAL_TIME_SCENARIO;
+    this->maxSep = MAX_SEP;
+    this->minSep = MIN_SEP;
+    this->minSpd = MIN_SPD;
+    this->maxSpd = MAX_SPD;
+}
+
 /*
     Parameters :
-        path = C:/dir1/dir2/dir3 (string)
+        path = C:/dir1/dir2/dir3 (string) || Output directory for csv saving
         duration of simulation (minutes)
-        maxSep = maximum time laps between two aircrafts (minutes)
-
+        minSep = minimum timelaps between two aircrafts (minutes) || Density parameters
+        maxSep = maximum timelaps between two aircrafts (minutes) ||
+        minSpd = minimum speed of aircrafts (kts) || Speed parameters
+        maxSpd = maximum speed of aircrafts (kts) ||
 */
-void RandomFlights::randomScenario(QString path, int duration, int minSep, int maxSep, int width, int height)
+void ScenarioGenerator::setProperties(int duration, int minSep, int maxSep, int minSpd, int maxSpd) {
+    this->duration = duration;
+    this->minSep = minSep;
+    this->maxSep = maxSep;
+    this->minSpd = minSpd;
+    this->maxSpd = maxSpd;
+}
+
+void ScenarioGenerator::print() {
+    cout << "ScenarioGenerator(" << duration << ", " << minSep << ", "
+         << maxSep << ", " << minSpd << ", " << maxSpd << ", " << width
+         << ", " << height << ")" << endl;
+}
+
+void ScenarioGenerator::randomScenario(QString path)
 {
     srand(time(NULL));
-
-    this->path = path;
-    this->duration = duration;
-    this->width = width;
-    this->height = height;
 
     // add Flights to list
     int time = 0;
     int deltaT, speed;
     SimpleFlight flightTemp;
+    this->path = path;
 
     while (time < duration)
     {
-        deltaT = randomNumber(minSep, maxSep); // 3min mini & density minutes maxi between two flights
-        speed = randomNumber(120, 170);        // Kts
+        deltaT = randomNumber(minSep, maxSep); // Density
+        speed = randomNumber(minSpd, maxSpd);  // Kts
 
         time += deltaT;
         flightTemp = generateValidFlight();
@@ -132,7 +162,7 @@ void RandomFlights::randomScenario(QString path, int duration, int minSep, int m
     This function returns a random SimpleFlight object
     Which is validate with isValid() method of Flight class
 */
-SimpleFlight RandomFlights::generateValidFlight()
+SimpleFlight ScenarioGenerator::generateValidFlight()
 {
     SimpleFlight flight;
     while (!flight.isValid())
@@ -151,14 +181,14 @@ SimpleFlight RandomFlights::generateValidFlight()
     return flight;
 }
 
-void RandomFlights::setFileName() {
+void ScenarioGenerator::setFileName() {
     QString timestamp = getTime();
     QString name{"randomScenario"};
     QString slash{"/"};
     fileName = path + slash + name + timestamp + ext;
 }
 
-QString RandomFlights::getFilePath() {
+QString ScenarioGenerator::getFilePath() {
     return fileName;
 }
 
@@ -166,7 +196,7 @@ QString RandomFlights::getFilePath() {
     This function returns nothing
     It write data of flightList in a file at the given path attribute
 */
-void RandomFlights::writeInFile()
+void ScenarioGenerator::writeInFile()
 {
     // Build complete file path
     setFileName();

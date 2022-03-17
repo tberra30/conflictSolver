@@ -10,5 +10,6 @@
         <file>restart.png</file>
         <file>stop.png</file>
         <file>plane.png</file>
+        <file>correct.png</file>
     </qresource>
 </RCC>

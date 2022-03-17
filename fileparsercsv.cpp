@@ -17,6 +17,7 @@ bool FileParserCsv::load(QString fileName) {
     flightList.clear();
 
     QFile inputFile(fileName);
+    path = fileName;
 
     if (inputFile.open(QIODevice::ReadOnly))
     {
@@ -82,12 +83,17 @@ const QList<Flight> &FileParserCsv::getFlightList() const
     return flightList;
 }
 
+const QString &FileParserCsv::getPath() const
+{
+    return path;
+}
+
 int FileParserCsv::getWidth() const
 {
     return width;
 }
 
-int FileParserCsv::getTotalMinutes() const {
+int FileParserCsv::getTotalTime() const {
     int max = 0;
 
     for (Flight flight : flightList) {

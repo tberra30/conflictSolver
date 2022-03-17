@@ -17,14 +17,16 @@ public:
     void setProperies(QList<QString>);
     void setFlightList(QList<Flight>);
 
-    int getTotalMinutes() const;
+    int getTotalTime() const;
     int getWidth() const;
     int getHeight() const;
     const QList<Flight> &getFlightList() const;
+    const QString &getPath() const;
 
 private:
     QList<QList<QString>> flightListTemp;
     QList<Flight> flightList;
+    QString path;
     bool isApproved();
     int width, height;
 };

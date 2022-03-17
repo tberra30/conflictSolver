@@ -2,7 +2,6 @@
 #include "ui_mainwindow.h"
 #include "fileparsercsv.h"
 #include "Constants.h"
-#include "scenariodialog.h"
 #include <QDebug>
 #include <QTimer>
 #include <QAction>
@@ -15,20 +14,23 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    // Main call to UI frame
+    // Call .ui files
     ui->setupUi(this);
-    timer = new QTimer(this);
+
+    // Define timers & scene
+    uiTimer = new QTimer(this);
+    sceneTimer = new QTimer(this);
     scene = new QGraphicsScene(this);
     scene->setSceneRect(0, 0, WIDTH, HEIGHT);
 
     // Initialize variables
     ResetSimulation();
 
+    // Start ui timer
+    uiTimer->start();
+
     // Define actions triggered by buttons (link buttons and actions)
     setUpActions();
-
-    // Start timer to emit signal every TIME_BEAN millisec
-    timer->start(TIME_BEAN);
 
     // Displaying (update view)
     ui->graphicsView->setScene(scene);
@@ -38,39 +40,51 @@ void MainWindow::setUpActions() {
     // Menu
     connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(Open()));
     connect(ui->actionReset, SIGNAL(triggered()), this, SLOT(ResetSimulation()));
-    connect(ui->actionConfigure, SIGNAL(triggered()), this, SLOT(turn()));
     connect(ui->actionGenerate, SIGNAL(triggered()), this, SLOT(GenerateScenario()));
     connect(ui->actionSaveScreen, SIGNAL(triggered()), this, SLOT(ResetSimulation()));
     connect(ui->actionGenerate_Open, SIGNAL(triggered()), this, SLOT(GenerateAndOpen()));
+    connect(ui->actionConfigure, SIGNAL(triggered()), this, SLOT(ShowScenarioConfig()));
+    connect(ui->checkBoxShowPath, SIGNAL(stateChanged(int)), this, SLOT(ShowPathWays()));
+    connect(ui->checkBoxFlightInfo, SIGNAL(stateChanged(int)), this, SLOT(ShowFlightInfos()));
+    connect(ui->checkBoxHorizon, SIGNAL(stateChanged(int)), this, SLOT(ShowHorizon()));
+    connect(ui->checkBoxCometes, SIGNAL(stateChanged(int)), this, SLOT(ShowCometes()));
+    connect(ui->ActiveSolver, SIGNAL(stateChanged(int)), this, SLOT(setAlgoGenActiveStatus()));
 
     // Push buttons
     connect(ui->pushButtonStart, SIGNAL(clicked()), this, SLOT(StartSimulation()));
     connect(ui->pushButtonRestart, SIGNAL(clicked()), this, SLOT(RestartSimulation()));
     connect(ui->pushButtonStop, SIGNAL(clicked()), this, SLOT(StopSimulation()));
     connect(ui->pushButtonReset, SIGNAL(clicked()), this, SLOT(ResetSimulation()));
+    connect(ui->reloadScenario, SIGNAL(clicked()), this, SLOT(ReloadScenario()));
+    connect(&scenarioConfigurator, SIGNAL(scenarioChange()), this, SLOT(setScenarioProperties()));
 
     // Sliders
     connect(ui->verticalSliderSpeed, SIGNAL(sliderMoved(int)), this, SLOT(SpeedChange()));
 
     // Timer
-    connect(timer, SIGNAL(timeout()), this, SLOT(update()));
+    connect(uiTimer, SIGNAL(timeout()), this, SLOT(updateWidgets()));
+    connect(sceneTimer, SIGNAL(timeout()), this, SLOT(updateAll()));
+    connect(sceneTimer, SIGNAL(timeout()), this, SLOT(launchAlgoGen()));
 }
 
-void MainWindow::turn() {
-    QList<Flight> temp = displayedFlightList;
-    displayedFlightList.clear();
-    for (Flight fl : temp) {
-        QList<int> turn;
-        turn.append(timeCounter + 300000);
-        turn.append(45);
-        turn.append(timeCounter + 600000);
-        fl.setTurn(turn);
-        displayedFlightList.append(fl);
+/*
+ * Modify aircrafts turn attibute if a turn is ordered
+*/
+void MainWindow::turn(QList<Individual> indList) {
+    for (int k = 0; k < displayedFlightList.length(); k ++) {
+        for (int j = 0; j < indList.length(); j ++) {
+            if (indList[j].getId() == displayedFlightList[k].getFlightNumberStr()) {
+                displayedFlightList[k].setTurn(QList{
+                                 timeCounter + indList[j].getTurnBeginTime(),
+                                 indList[j].getTurnRadius(),
+                                 timeCounter + indList[j].getTurnEndTime()});
+            }
+        }
     }
 }
 
 void MainWindow::StartSimulation() {
-    isRunning = true;
+    sceneTimer->start();
     ui->verticalSliderSpeed->setDisabled(false);
 }
 
@@ -83,18 +97,32 @@ void MainWindow::ResetSimulation() {
     // Graphic reset
     scene->clear();
     scene->update();
+    algoGen.reset();
 
     // Data reset
-    displayedFlightList = fileParser.getFlightList();
+    displayedFlightList.clear();
 
     // Parameters reset
     timeCounter = 0;
     speedFactor = DEFAULT_SPEED_VALUE;
+
+    // Set timers to emit signal every x millisec
+    uiTimer->setInterval(UPDATE_TIME_APP);
+    sceneTimer->setInterval(UPDATE_TIME_APP);
+
+    ui->verticalSliderSpeed->setValue(speedFactor);
+
     StopSimulation();
 }
 
 void MainWindow::StopSimulation() {
-    isRunning = false;
+    sceneTimer->stop();
+}
+
+void MainWindow::ReloadScenario() {
+    StopSimulation();
+    fileParser.load(fileParser.getPath());
+    ResetSimulation();
 }
 
 void MainWindow::setDisableControls(bool b) {
@@ -116,34 +144,35 @@ QString MainWindow::browseDirectory() {
     return fileName;
 }
 
-void MainWindow::open(QString fileName) {
+void MainWindow::open(QString fileName, bool showWindow) {
+    StopSimulation();
     if (!fileName.isEmpty()) {
         if(fileParser.load(fileName)) {
             ResetSimulation();
             setDisableControls(false);
-            totalTime = fileParser.getTotalMinutes();
+            totalTime = fileParser.getTotalTime();
             graphicPainter.setProperies(fileParser.getWidth(), fileParser.getHeight());
             ui->labelCurrentFile->setText(fileName);
-            QMessageBox::information(this, "Success", "File loaded successfully");
+            updateWidgets();
+            if (showWindow) QMessageBox::information(this, "Success", "File loaded successfully");
         } else {
             setDisableControls(true);
-            QMessageBox::information(this, "Error", "File does not match the correct format");
+            if (showWindow) QMessageBox::information(this, "Error", "File does not match the correct format");
         }
     }
 }
 
 void MainWindow::Open() {
-   open(browseDirectory());
+   open(browseDirectory(), true);
 }
 
 QString MainWindow::GenerateScenario() {
+    StopSimulation();
+
     QString returnedPath = "";
 
     /* Init params */
     QString path = QDir::home().path();
-    int scenarioTime = TOTAL_TIME_SCENARIO;
-    int minSep = MIN_SEP;
-    int maxSep = MAX_SEP;
 
     /* Display dialog window */
     QString dirPath = QFileDialog::getExistingDirectory(this, "Choose output directory", path);
@@ -151,57 +180,125 @@ QString MainWindow::GenerateScenario() {
         path = dirPath;
 
         /* Compute scenario */
-        scenarioGenerator.randomScenario(path,
-                                         scenarioTime,
-                                         minSep,
-                                         maxSep,
-                                         WINDOW_WIDTH,
-                                         WINDOW_HEIGHT);
+        scenarioGenerator.randomScenario(path);
 
         returnedPath = scenarioGenerator.getFilePath();
 
-        QMessageBox::information(this, "Success", "Scenario has been generate successfully in " + scenarioGenerator.getFilePath());
+        QMessageBox::information(this, "Success", "Scenario has been generate successfully in " + returnedPath);
     }
 
     return returnedPath;
 }
 
+void MainWindow::launchAlgoGen() {
+    if (timeCounter % UPDATE_TIME_ALGO_GEN < UPDATE_TIME_APP * speedFactor) {
+        // Apply turn solutions to aircrafts
+        ui->label_conflict->setPalette(QPalette(QColor("orange"), QColor("orange"), QColor("orange"), QColor("orange"), QColor("orange"), QColor("orange"), QColor("orange")));
+        ui->label_conflict->setText("Algo gen processing ...");
+        turn(algoGen.run(displayedFlightList, timeCounter));
+        QString conflict = (algoGen.getConflictDetected()) ? "WARNING : conflict(s) detected" : "No conflict detected";
+        QColor textColor = (algoGen.getConflictDetected()) ? Qt::red : Qt::green;
+        ui->label_conflict->setPalette(QPalette(textColor, textColor, textColor, textColor, textColor, textColor, textColor));
+        ui->label_conflict->setText(conflict);
+    }
+}
+
+void MainWindow::setScenarioProperties() {
+    scenarioGenerator.setProperties(scenarioConfigurator.getDuration(),
+                                    scenarioConfigurator.getMinTimelaps(),
+                                    scenarioConfigurator.getMaxTimelaps(),
+                                    scenarioConfigurator.getMaxSpeed(),
+                                    scenarioConfigurator.getMinSpeed());
+}
+
 void MainWindow::GenerateAndOpen() {
-    open(GenerateScenario());
+    open(GenerateScenario(), false);
 }
 
 void MainWindow::SpeedChange() {
     speedFactor = ui->verticalSliderSpeed->value();
+    updateWidgets();
 }
 
+/*
+ * Increment time counter
+ */
 void MainWindow::updateTime() {
-    if (isRunning) {
-        timeCounter += TIME_BEAN * speedFactor;
-    }
+    timeCounter += UPDATE_TIME_APP * speedFactor;
+}
 
-    // Update widgets
-    double timeMinute = timeCounter/ (double)(TO_MILLISEC * TO_SEC);
+/*
+ * Update widgets in IHM
+ */
+void MainWindow::updateWidgets() {
+    double timeMinute = (double) timeCounter/ (TO_MILLISEC * TO_SEC);
     double timeSecond = (timeCounter / TO_MILLISEC) % TO_SEC;
 
     ui->lcdNumberTimeMin->display(qFloor(timeMinute));
     ui->lcdNumberTimeSec->display(qFloor(timeSecond));
-    ui->progressBar->setValue(qFloor(TO_PERCENTAGE * timeMinute / totalTime));
-    ui->verticalSliderSpeed->setValue(speedFactor);
+    ui->progressBar->setValue(qFloor(TO_PERCENTAGE * timeCounter / totalTime));
     ui->lcdNumberSpeed->display(speedFactor);
+}
 
-    algoGen.printConflicts(displayedFlightList, timeCounter);
+void MainWindow::ShowPathWays() {
+    graphicPainter.setShowPath(ui->checkBoxShowPath->checkState());
+    updateScene();
+}
+
+void MainWindow::ShowFlightInfos() {
+    graphicPainter.setShowFlightInfo(ui->checkBoxFlightInfo->checkState());
+    updateScene();
+}
+
+void MainWindow::ShowHorizon() {
+    graphicPainter.setShowHpred(ui->checkBoxHorizon->checkState());
+    updateScene();
+}
+
+void MainWindow::ShowCometes() {
+    graphicPainter.setShowCometes(ui->checkBoxCometes->checkState());
+    updateScene();
+}
+
+void MainWindow::setAlgoGenActiveStatus() {
+    bool state = ui->ActiveSolver->checkState();
+    QString iconRessourcePath = (state) ? ":/img/correct.png" : ":/img/remove.png";
+    QString buttonText = (state) ? "Conflict solver activated" : "Conflict solver disabled";
+    ui->ActiveSolver->setText(buttonText);
+    ui->ActiveSolver->setIcon(QIcon(iconRessourcePath));
+    algoGen.setActive(state);
+    updateScene();
+}
+
+void MainWindow::ShowScenarioConfig() {
+    scenarioConfigurator.show();
 }
 
 void MainWindow::setPreviousPositions() {
-    QList<Flight> temp = displayedFlightList;
-    displayedFlightList.clear();
-    for (Flight flight : temp) {
-        flight.updatePreviousPositions(flight.getXt(timeCounter));
-        displayedFlightList.append(flight);
+    for (int i = 0; i < displayedFlightList.length(); i ++) {
+        displayedFlightList[i].updatePreviousPositions(timeCounter);
     }
 }
 
 void MainWindow::forceUpdateScene() {
+    QList<QString> idList;
+    for (Flight fl : displayedFlightList) {
+        idList.append(fl.getFlightNumberStr());
+    }
+
+    // Update displayed flights list
+    for (Flight flight : fileParser.getFlightList()) {
+        if (idList.contains(flight.getFlightNumberStr())) {
+            if (timeCounter > flight.getArvTime()) {
+                displayedFlightList.removeOne(flight);
+            }
+        } else {
+            if (timeCounter >= flight.getStartTime() && timeCounter <= flight.getArvTime()) {
+                displayedFlightList.append(flight);
+            }
+        }
+    }
+
    // Update previous positions if timelaps is anough
    setPreviousPositions();
 
@@ -210,16 +307,15 @@ void MainWindow::forceUpdateScene() {
 }
 
 void MainWindow::updateScene() {
-    if (isRunning) {
-        if (timeCounter >= totalTime * TO_SEC * TO_MILLISEC) {
-            ResetSimulation();
-        } else {
-            forceUpdateScene();
-        }
+    // End of simulation condition
+    if (timeCounter >= totalTime) {
+        ResetSimulation();
+    } else {
+        forceUpdateScene();
     }
 }
 
-void MainWindow::update() {
+void MainWindow::updateAll() {
     updateTime();
     updateScene();
 }

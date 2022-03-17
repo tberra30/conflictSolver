@@ -2,17 +2,42 @@
 #include "Constants.h"
 #include <QDebug>
 #include <QPainterPath>
+#include <QGraphicsSimpleTextItem>
 
 #include <iostream>
 using namespace std;
 
 GraphicPainter::GraphicPainter()
 {
+    this->showPath = false;
+    this->showFlightInfo = true;
+    this->showHpred = true;
+    this->showCometes = false;
 }
 
 void GraphicPainter::setProperies(int w, int h) {
     this->maxWidth = w;
     this->maxHeight = h;
+}
+
+void GraphicPainter::setShowPath(bool newShowPath)
+{
+    showPath = newShowPath;
+}
+
+void GraphicPainter::setShowFlightInfo(bool newShowFlightInfo)
+{
+    showFlightInfo = newShowFlightInfo;
+}
+
+void GraphicPainter::setShowHpred(bool newShowHpred)
+{
+    showHpred = newShowHpred;
+}
+
+void GraphicPainter::setShowCometes(bool newShowCometes)
+{
+    showCometes = newShowCometes;
 }
 
 /*
@@ -51,33 +76,32 @@ QPolygon GraphicPainter::createGraphicPlane() {
                    -10, -1, //20
                    -10, 0 //1
                     );
-    return aircraft;
+    return QTransform().rotateRadians(M_PI).map(aircraft);
 }
 
 void GraphicPainter::updatePosition(QList<Flight> flights, QGraphicsScene *scene, int time) {
     // Clear scene
     scene->clear();
 
-    // Update displayed flights list
-    displayedFlights.clear();
-    for (Flight flight : flights) {
-        if (time >= flight.getStartTime() * TO_MILLISEC * TO_SEC && time <= flight.getArvTime() * TO_MILLISEC * TO_SEC) {
-            displayedFlights.append(flight);
-        }
+    displayedFlights = flights;
+
+    // Show track
+    if (showPath) {
+        for (Flight flight : flights) drawDottedLine(scene, flight);
     }
 
-    // Update graphic objects list & append to scene
-    for (Flight flight : displayedFlights) {
-
-        // Around aircraft
-        drawDottedLine(scene, flight);
-
-        // Previous pos
-        drawPreviousPositions(scene, flight, time);
-
-        // Aircraft
-        drawAircraft(scene, flight, time);
+    // Prdiction incertitude cone
+    if (showHpred) {
+        for (Flight flight : flights) drawPredictionHorizon(scene, flight, time, H_PRED * TO_SEC * TO_MILLISEC);
     }
+
+    // Previous pos
+    if (showCometes) {
+        for (Flight flight : flights) drawPreviousPositions(scene, flight, time);
+    }
+
+    // Draw aircrafts
+    for (Flight flight : flights) drawAircraft(scene, flight, time);
 
     // Update scene
     scene->update();
@@ -110,14 +134,49 @@ void GraphicPainter::drawPreviousPositions(QGraphicsScene *scene, Flight flight,
     }
 }
 
+void GraphicPainter::drawPredictionHorizon(QGraphicsScene* scene, Flight flight, int t, int horizon) {
+    QColor color = Qt::green;
+    QPen pen(color, 1);
+
+    double hMin = (double) horizon / (TO_SEC * TO_MILLISEC);
+    double range = ((double) horizon / (TO_SEC * TO_SEC * TO_MILLISEC)) * flight.getSpeed();
+    double alpha = atan((double)(hMin * D_SEP) / (2 * range));
+
+    Point Xt = flight.getXt(t);
+    Point Xh1 = Xt + Point::toPointFromPolar(range, flight.getHdg(t) + alpha);
+    Point Xh2 = Xt + Point::toPointFromPolar(range, flight.getHdg(t) - alpha);
+
+    scene->addLine(scaleToSceneX(Xt.x()), scaleToSceneY(Xt.y()),
+                   scaleToSceneX(Xh1.x()), scaleToSceneY(Xh1.y()),
+                   pen);
+
+    scene->addLine(scaleToSceneX(Xt.x()), scaleToSceneY(Xt.y()),
+                   scaleToSceneX(Xh2.x()), scaleToSceneY(Xh2.y()),
+                   pen);
+}
+
 void GraphicPainter::drawAircraft(QGraphicsScene *scene, Flight flight, int t) {
     QPolygon aircraft = createGraphicPlane();
     double Xscene = scaleToSceneX(flight.getXt(t).x());
     double Yscene = scaleToSceneY(flight.getXt(t).y());
+
     aircraft = QTransform().translate(Xscene, Yscene)
-                            .rotateRadians(flight.getHdg(t)).map(aircraft);
+                            .rotateRadians(flight.getHdg(t))
+                            .map(aircraft);
+
     QColor color = (flight.isInConflict(displayedFlights, t)) ? Qt::red : Qt::white;
-    scene->addPolygon(aircraft, QPen(color, 1));
+    QColor colorIn = color;
+    colorIn.setAlpha(150);
+    scene->addPolygon(aircraft, QPen(color, 1), colorIn);
+
+    // Show flight infos only if flight info is checked
+    if (showFlightInfo) {
+        QGraphicsTextItem *tooltip = new QGraphicsTextItem("AF" + flight.getFlightNumberStr() +
+                                                           "\n" + QString::number(flight.getSpeed()) + "kts");
+        tooltip->setPos(Xscene + 10, Yscene - 15);
+        tooltip->setDefaultTextColor(color);
+        scene->addItem(tooltip);
+    }
 }
 
 double GraphicPainter::scaleToSceneX(double valueX) {

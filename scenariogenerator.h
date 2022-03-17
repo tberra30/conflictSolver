@@ -6,11 +6,17 @@
 #include <QList>
 #include <stdlib.h>
 
-class RandomFlights
+class ScenarioGenerator
 {
 public:
-    void randomScenario(QString, int, int, int, int, int);
+    ScenarioGenerator();
+    void randomScenario(QString path);
     QString getFilePath();
+    static int randomNumber(int, int);
+    static double random();
+
+    void setProperties(int duration, int minSep, int maxSep, int minSpd, int maxSpd);
+    void print();
 
 private:
     const QString ext = ".csv";
@@ -21,6 +27,10 @@ private:
     int duration;
     int width;
     int height;
+    int minSep;
+    int maxSep;
+    int minSpd;
+    int maxSpd;
     int x;
     int y;
 

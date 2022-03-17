@@ -1,16 +1,23 @@
 #include "point.h"
 #include <iostream>
+#include <QList>
 
 Point::Point()
 {
+    IsDefault = true;
     X = 0.0;
     Y = 0.0;
 }
 
 Point::Point(double x, double y)
 {
+    IsDefault = false;
     X = x;
     Y = y;
+}
+
+bool Point::isDefault() {
+    return IsDefault;
 }
 
 double Point::getDist() {
@@ -19,8 +26,8 @@ double Point::getDist() {
 
 double Point::getRadius(Point A, Point B) {
     Point C = B - A;
-    double additionalRadius = (C.X < 0) ? 0 : M_PI;
-    return atan((double)(C.Y) / C.X) + additionalRadius;
+    double add = (C.X < 0) ? M_PI : 0;
+    return atan((double)(C.Y) / C.X) + add;
 }
 
 double Point::getRange(Point A, Point B) {
@@ -49,6 +56,13 @@ ostream& operator<<(ostream& os, const Point& pt)
     return os;
 }
 
+ostream& operator<<(ostream& os, const QList<Point> pts) {
+    for (Point pt : pts) {
+        os << " " << pt;
+    }
+    return os;
+}
+
 Point operator+(const Point& pt1, const Point& pt2) {
     return Point(pt1.X + pt2.X, pt1.Y + pt2.Y);
 }
@@ -59,4 +73,8 @@ Point operator-(const Point& pt1, const Point& pt2) {
 
 Point operator*(const Point& pt, const double lambda) {
     return Point(pt.X * lambda, pt.Y * lambda);
+}
+
+Point operator/(const Point& pt, const double lambda) {
+    return Point(pt.X / lambda, pt.Y / lambda);
 }
